@@ -66,14 +66,15 @@ resource "google_compute_instance" "experiment" {
   }
 
   metadata = {
-    ssh-keys       = "runner:${var.ssh_public_key}"
-    startup-script = local.has_gpu ? file("${path.module}/startup-gpu.sh") : ""
+    ssh-keys = "runner:${var.ssh_public_key}"
   }
 
-  # Auto-shutdown safety net
   metadata_startup_script = <<-EOF
     #!/bin/bash
+    # Auto-shutdown safety net
     (sleep ${var.max_runtime_seconds} && shutdown -h now) &
+
+    ${local.has_gpu ? file("${path.module}/startup-gpu.sh") : ""}
   EOF
 
   network_interface {
