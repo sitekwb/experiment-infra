@@ -1,7 +1,7 @@
 locals {
   vm_name    = "exp-${var.experiment_id}"
   has_gpu    = var.gpu_type != "" && var.gpu_count > 0
-  boot_image = local.has_gpu ? "deeplearning-platform-release/common-gpu-debian-11" : "cos-cloud/cos-stable"
+  boot_image = local.has_gpu ? "deeplearning-platform-release/common-gpu-debian-11" : "ubuntu-os-cloud/ubuntu-2204-lts"
 }
 
 # ─── Networking ──────────────────────────────────────────────
@@ -15,7 +15,7 @@ resource "google_compute_firewall" "experiment_ssh" {
     ports    = ["22"]
   }
 
-  source_ranges = ["0.0.0.0/0"]
+  source_ranges = var.allowed_ssh_ranges
   target_tags   = ["experiment-vm"]
 }
 
@@ -74,7 +74,7 @@ resource "google_compute_instance" "experiment" {
     # Auto-shutdown safety net
     (sleep ${var.max_runtime_seconds} && shutdown -h now) &
 
-    ${local.has_gpu ? file("${path.module}/startup-gpu.sh") : ""}
+    ${local.has_gpu ? file("${path.module}/startup-gpu.sh") : file("${path.module}/startup-cpu.sh")}
   EOF
 
   network_interface {

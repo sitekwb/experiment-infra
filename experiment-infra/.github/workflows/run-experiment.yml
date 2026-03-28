@@ -21,6 +21,10 @@ on:
       disk_size_gb:
         type: string
         default: "80"
+      tf_state_bucket:
+        type: string
+        default: "pw-experiment-tf-state"
+        description: "GCS bucket for Terraform remote state"
     secrets:
       GCP_SA_KEY:
         required: true
@@ -82,7 +86,7 @@ jobs:
           if [ "$GPU_TYPE" != "none" ]; then GPU_COUNT=1; else GPU_TYPE=""; fi
 
           terraform init -input=false \
-            -backend-config="bucket=pw-experiment-tf-state" \
+            -backend-config="bucket=${{ inputs.tf_state_bucket }}" \
             -backend-config="prefix=${{ env.PROJECT_NAME }}-${{ github.run_number }}"
 
           terraform apply -auto-approve -input=false \
@@ -100,11 +104,19 @@ jobs:
       - name: "⏳ Wait for VM"
         run: |
           SSH_OPTS="-i ~/.ssh/exp -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o UserKnownHostsFile=/dev/null"
+          READY=false
           for _i in $(seq 1 60); do
             # shellcheck disable=SC2086  # SSH_OPTS must word-split
-            ssh $SSH_OPTS "runner@${{ steps.tf.outputs.vm_ip }}" "echo ready" 2>/dev/null && break
+            if ssh $SSH_OPTS "runner@${{ steps.tf.outputs.vm_ip }}" "echo ready" 2>/dev/null; then
+              READY=true
+              break
+            fi
             sleep 10
           done
+          if [ "$READY" != "true" ]; then
+            echo "::error::VM did not become reachable after 10 minutes"
+            exit 1
+          fi
 
       # ── Run ────────────────────────────────────────────────
       - name: "📦 Deploy to VM"
@@ -164,12 +176,13 @@ jobs:
           if [ -n "$(ls -A results/ 2>/dev/null)" ]; then
             git config user.name "experiment-runner"
             git config user.email "experiment-runner@github.actions"
-            git checkout -B experiment-results 2>/dev/null || git checkout experiment-results || git checkout -b experiment-results
+            BRANCH="experiment-results/${{ env.EXPERIMENT_ID }}"
+            git checkout -b "$BRANCH"
             mkdir -p results/${{ env.EXPERIMENT_ID }}
             cp -r results/* results/${{ env.EXPERIMENT_ID }}/ 2>/dev/null || true
             git add results/
             git commit -m "🧪 ${{ env.EXPERIMENT_ID }} [${{ inputs.machine_type }}/${{ inputs.gpu }}]" || true
-            git push origin experiment-results --force-with-lease || git push origin experiment-results --force || true
+            git push origin "$BRANCH" || true
           fi
 
       # ── Teardown (ALWAYS) ──────────────────────────────────

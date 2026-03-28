@@ -14,10 +14,26 @@ case "$STATUS" in
   *)         EMOJI="❓"; COLOR=9807270;  TITLE="Status: $STATUS" ;;
 esac
 
-FIELDS="[{\"name\":\"Project\",\"value\":\"\`$PROJECT\`\",\"inline\":true},{\"name\":\"Machine\",\"value\":\"\`$MACHINE\`\",\"inline\":true},{\"name\":\"GPU\",\"value\":\"\`$GPU\`\",\"inline\":true}"
-[ -n "$EXTRA" ] && FIELDS="$FIELDS,{\"name\":\"Note\",\"value\":\"$EXTRA\",\"inline\":false}"
-FIELDS="$FIELDS]"
+FIELDS=$(jq -n \
+  --arg project "$PROJECT" \
+  --arg machine "$MACHINE" \
+  --arg gpu "$GPU" \
+  '[
+    {name: "Project", value: ("`" + $project + "`"), inline: true},
+    {name: "Machine", value: ("`" + $machine + "`"), inline: true},
+    {name: "GPU", value: ("`" + $gpu + "`"), inline: true}
+  ]')
 
-curl -s -X POST "$WEBHOOK_URL" -H "Content-Type: application/json" -d "{
-  \"embeds\":[{\"title\":\"$EMOJI $TITLE\",\"color\":$COLOR,\"fields\":$FIELDS,\"url\":\"$URL\",\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}]
-}"
+if [ -n "$EXTRA" ]; then
+  FIELDS=$(echo "$FIELDS" | jq --arg extra "$EXTRA" '. + [{name: "Note", value: $extra, inline: false}]')
+fi
+
+PAYLOAD=$(jq -n \
+  --arg title "$EMOJI $TITLE" \
+  --argjson color "$COLOR" \
+  --argjson fields "$FIELDS" \
+  --arg url "$URL" \
+  --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  '{embeds: [{title: $title, color: $color, fields: $fields, url: $url, timestamp: $ts}]}')
+
+curl -s -X POST "$WEBHOOK_URL" -H "Content-Type: application/json" -d "$PAYLOAD"
