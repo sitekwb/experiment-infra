@@ -17,7 +17,7 @@ set -euo pipefail
 GH_USERNAME="${GH_USERNAME:-}"  # Set this or it will prompt
 
 if [ -z "$GH_USERNAME" ]; then
-  read -p "GitHub username/org: " GH_USERNAME
+  read -rp "GitHub username/org: " GH_USERNAME
 fi
 
 INFRA_REPO="git@github.com:${GH_USERNAME}/experiment-infra.git"
@@ -57,7 +57,7 @@ else
   WORKFLOW_SRC="experiment-infra/templates/experiment.yml"
 fi
 
-copy_if_missing "experiment-infra/templates/experiment.yml" ".github/workflows/experiment.yml"
+copy_if_missing "$WORKFLOW_SRC" ".github/workflows/experiment.yml"
 copy_if_missing "experiment-infra/templates/docker-compose.experiment.yml" "docker-compose.experiment.yml"
 copy_if_missing "experiment-infra/templates/Dockerfile.experiment" "Dockerfile.experiment"
 copy_if_missing "experiment-infra/templates/experiment.sh" "experiment.sh"
