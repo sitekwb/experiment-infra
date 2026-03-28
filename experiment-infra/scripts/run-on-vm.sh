@@ -4,14 +4,13 @@ set -euo pipefail
 # run-on-vm.sh — Executed on the GCP VM via SSH
 # Expects: ~/project/ (cloned repo), ~/experiment-config.yml
 
-EXTRA_ARGS="${1:-}"
 PROJECT_DIR="$HOME/project"
 COMPOSE_FILE="docker-compose.experiment.yml"
 
 cd "$PROJECT_DIR"
 
 echo "========================================="
-echo "  Project:  $(basename $PROJECT_DIR)"
+echo "  Project:  $(basename "$PROJECT_DIR")"
 echo "  Started:  $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo "  Machine:  $(uname -m), $(nproc) cores, $(free -h | awk '/Mem:/{print $2}') RAM"
 echo "  GPU:      $(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null || echo 'none')"
@@ -39,8 +38,8 @@ EXIT_CODE=${PIPESTATUS[0]}
 echo "========================================="
 echo "  Finished: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo "  Exit:     $EXIT_CODE"
-echo "  Results:  $(ls results/ | wc -l) files"
+echo "  Results:  $(find results/ -maxdepth 1 -type f | wc -l) files"
 echo "========================================="
 ls -la results/
 
-exit $EXIT_CODE
+exit "$EXIT_CODE"
