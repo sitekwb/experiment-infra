@@ -1,0 +1,55 @@
+# .github/workflows/experiment.yml
+# Thin caller — dispatches to experiment-infra reusable workflow.
+# Customize the 'options' per project; the rest stays as-is.
+
+name: "🧪 Run Experiment"
+
+on:
+  workflow_dispatch:
+    inputs:
+      machine_type:
+        description: "Machine type"
+        type: choice
+        default: "e2-standard-4"
+        options:
+          - e2-standard-4
+          - e2-standard-8
+          - n1-standard-8
+          - n1-highmem-8
+      gpu:
+        description: "GPU (none = CPU only)"
+        type: choice
+        default: "none"
+        options:
+          - none
+          - nvidia-tesla-t4
+          - nvidia-tesla-v100
+      max_runtime_minutes:
+        description: "Timeout (minutes)"
+        type: choice
+        default: "120"
+        options:
+          - "30"
+          - "60"
+          - "120"
+          - "240"
+          - "360"
+      experiment_args:
+        description: "Extra args for experiment.sh"
+        required: false
+        default: ""
+
+jobs:
+  run:
+    uses: # ← FILL IN: <username>/experiment-infra/.github/workflows/run-experiment.yml@main
+    with:
+      machine_type: ${{ inputs.machine_type }}
+      gpu: ${{ inputs.gpu }}
+      max_runtime_minutes: ${{ inputs.max_runtime_minutes }}
+      experiment_args: ${{ inputs.experiment_args }}
+    secrets:
+      GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+      GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+      VM_SSH_PRIVATE_KEY: ${{ secrets.VM_SSH_PRIVATE_KEY }}
+      GH_PAT: ${{ secrets.GH_PAT }}
