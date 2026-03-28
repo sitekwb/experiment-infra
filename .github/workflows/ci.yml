@@ -24,23 +24,26 @@ jobs:
             project-template/experiment.sh
 
       - name: Install actionlint
-        run: bash <(curl -sL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-bash.sh)
+        run: |
+          curl -sL https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz \
+            | tar xz -C /usr/local/bin actionlint
 
       - name: Validate GitHub Actions workflows
         run: |
-          ./actionlint \
+          actionlint \
             .github/workflows/ci.yml \
             experiment-infra/.github/workflows/run-experiment.yml
 
-      - name: Lint Dockerfiles
-        uses: hadolint/hadolint-action@v3.1.0
-        with:
-          dockerfile: project-template/Dockerfile.experiment
+      - name: Install hadolint
+        run: |
+          curl -sL https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64 \
+            -o /usr/local/bin/hadolint
+          chmod +x /usr/local/bin/hadolint
 
-      - name: Lint Dockerfiles (templates)
-        uses: hadolint/hadolint-action@v3.1.0
-        with:
-          dockerfile: experiment-infra/templates/Dockerfile.experiment
+      - name: Lint Dockerfiles
+        run: |
+          hadolint project-template/Dockerfile.experiment
+          hadolint experiment-infra/templates/Dockerfile.experiment
 
       - name: Install yamllint
         run: pip install --quiet yamllint
