@@ -1,0 +1,24 @@
+# docker-compose.experiment.yml — add to project root
+# The experiment-runner expects this file name exactly.
+
+services:
+  experiment:
+    build:
+      context: .
+      dockerfile: Dockerfile.experiment
+    volumes:
+      - ./results:/app/results
+    environment:
+      - SEED=${SEED:-42}
+      - EPOCHS=${EPOCHS:-10}
+      - BATCH_SIZE=${BATCH_SIZE:-16}
+      # Add your project-specific env vars here
+    # GPU projects: uncomment below
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+    entrypoint: ["bash", "/app/experiment.sh"]

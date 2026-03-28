@@ -1,0 +1,193 @@
+name: "Reusable: Run Experiment on GCP"
+
+on:
+  workflow_call:
+    inputs:
+      machine_type:
+        type: string
+        default: "e2-standard-4"
+      gpu:
+        type: string
+        default: "none"
+      max_runtime_minutes:
+        type: string
+        default: "120"
+      experiment_args:
+        type: string
+        default: ""
+      expose_http:
+        type: boolean
+        default: false
+      disk_size_gb:
+        type: string
+        default: "80"
+    secrets:
+      GCP_SA_KEY:
+        required: true
+      GCP_PROJECT_ID:
+        required: true
+      DISCORD_WEBHOOK_URL:
+        required: false
+      VM_SSH_PRIVATE_KEY:
+        required: true
+      GH_PAT:
+        required: true
+
+jobs:
+  experiment:
+    name: "🔬 Experiment [${{ inputs.machine_type }}]"
+    runs-on: ubuntu-latest
+    timeout-minutes: 400
+
+    env:
+      GOOGLE_CREDENTIALS: ${{ secrets.GCP_SA_KEY }}
+      TF_VAR_gcp_project_id: ${{ secrets.GCP_PROJECT_ID }}
+      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+      # Project name = calling repo name
+      PROJECT_NAME: ${{ github.event.repository.name }}
+      EXPERIMENT_ID: "${{ github.event.repository.name }}-${{ github.run_number }}"
+
+    steps:
+      # ── Setup ──────────────────────────────────────────────
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          token: ${{ secrets.GH_PAT }}
+
+      - name: "📣 Discord: Starting"
+        run: |
+          bash experiment-infra/scripts/notify-discord.sh "START" \
+            "$PROJECT_NAME" "${{ inputs.machine_type }}" "${{ inputs.gpu }}" \
+            "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VM_SSH_PRIVATE_KEY }}" > ~/.ssh/exp
+          chmod 600 ~/.ssh/exp
+          ssh-keygen -y -f ~/.ssh/exp > ~/.ssh/exp.pub
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      # ── Infra Up ───────────────────────────────────────────
+      - name: "🏗️ Terraform Apply"
+        id: tf
+        working-directory: experiment-infra/infra
+        run: |
+          GPU_TYPE="${{ inputs.gpu }}"
+          GPU_COUNT=0
+          if [ "$GPU_TYPE" != "none" ]; then GPU_COUNT=1; else GPU_TYPE=""; fi
+
+          terraform init -input=false \
+            -backend-config="bucket=pw-experiment-tf-state" \
+            -backend-config="prefix=${{ env.PROJECT_NAME }}-${{ github.run_number }}"
+
+          terraform apply -auto-approve -input=false \
+            -var="machine_type=${{ inputs.machine_type }}" \
+            -var="gpu_type=${GPU_TYPE}" \
+            -var="gpu_count=${GPU_COUNT}" \
+            -var="experiment_id=${{ env.EXPERIMENT_ID }}" \
+            -var="ssh_public_key=$(cat ~/.ssh/exp.pub)" \
+            -var="max_runtime_seconds=$(( ${{ inputs.max_runtime_minutes }} * 60 + 1800 ))" \
+            -var="disk_size_gb=${{ inputs.disk_size_gb }}" \
+            -var="expose_http=${{ inputs.expose_http }}"
+
+          echo "vm_ip=$(terraform output -raw vm_ip)" >> $GITHUB_OUTPUT
+
+      - name: "⏳ Wait for VM"
+        run: |
+          SSH_OPTS="-i ~/.ssh/exp -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o UserKnownHostsFile=/dev/null"
+          for i in $(seq 1 60); do
+            ssh $SSH_OPTS runner@${{ steps.tf.outputs.vm_ip }} "echo ready" 2>/dev/null && break
+            sleep 10
+          done
+
+      # ── Run ────────────────────────────────────────────────
+      - name: "📦 Deploy to VM"
+        run: |
+          VM="${{ steps.tf.outputs.vm_ip }}"
+          SSH="ssh -i ~/.ssh/exp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+          SCP="scp -i ~/.ssh/exp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+
+          # Clone THIS project repo on the VM (same ref that triggered the workflow)
+          $SSH runner@$VM "git clone --branch ${{ github.ref_name }} --depth 1 \
+            https://x-access-token:${{ secrets.GH_PAT }}@github.com/${{ github.repository }}.git ~/project"
+
+          # Copy run script
+          $SCP experiment-infra/scripts/run-on-vm.sh runner@$VM:~/run-on-vm.sh
+          $SSH runner@$VM "chmod +x ~/run-on-vm.sh"
+
+      - name: "🚀 Run experiment"
+        run: |
+          SSH="ssh -i ~/.ssh/exp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+          $SSH runner@${{ steps.tf.outputs.vm_ip }} \
+            "timeout $(( ${{ inputs.max_runtime_minutes }} * 60 )) ~/run-on-vm.sh '${{ inputs.experiment_args }}'" \
+            || EXIT_CODE=$?
+
+          if [ "${EXIT_CODE:-0}" -eq 124 ]; then
+            echo "::warning::Hit timeout (${{ inputs.max_runtime_minutes }} min)"
+          elif [ "${EXIT_CODE:-0}" -ne 0 ]; then
+            echo "::error::Experiment failed (exit $EXIT_CODE)"
+            exit ${EXIT_CODE}
+          fi
+
+      # ── Results ────────────────────────────────────────────
+      - name: "📥 Collect results"
+        if: always()
+        run: |
+          SCP="scp -r -i ~/.ssh/exp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+          SSH="ssh -i ~/.ssh/exp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+          mkdir -p results
+
+          $SCP runner@${{ steps.tf.outputs.vm_ip }}:~/project/results/* ./results/ 2>/dev/null || true
+
+          # Grab docker logs
+          $SSH runner@${{ steps.tf.outputs.vm_ip }} \
+            "cd ~/project && docker compose -f docker-compose.experiment.yml logs" \
+            > results/docker-logs.txt 2>/dev/null || true
+
+      - name: "💾 Upload artifact"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: "${{ env.EXPERIMENT_ID }}-results"
+          path: results/
+          retention-days: 90
+
+      - name: "📝 Commit results to branch"
+        if: success()
+        run: |
+          if [ -n "$(ls -A results/ 2>/dev/null)" ]; then
+            git config user.name "experiment-runner"
+            git config user.email "experiment-runner@github.actions"
+            git checkout -B experiment-results 2>/dev/null || git checkout experiment-results || git checkout -b experiment-results
+            mkdir -p results/${{ env.EXPERIMENT_ID }}
+            cp -r results/* results/${{ env.EXPERIMENT_ID }}/ 2>/dev/null || true
+            git add results/
+            git commit -m "🧪 ${{ env.EXPERIMENT_ID }} [${{ inputs.machine_type }}/${{ inputs.gpu }}]" || true
+            git push origin experiment-results --force-with-lease || git push origin experiment-results --force || true
+          fi
+
+      # ── Teardown (ALWAYS) ──────────────────────────────────
+      - name: "🧹 Terraform Destroy"
+        if: always()
+        working-directory: experiment-infra/infra
+        run: |
+          terraform destroy -auto-approve -input=false \
+            -var="machine_type=${{ inputs.machine_type }}" \
+            -var="gpu_type=${{ inputs.gpu == 'none' && '' || inputs.gpu }}" \
+            -var="gpu_count=${{ inputs.gpu == 'none' && '0' || '1' }}" \
+            -var="experiment_id=${{ env.EXPERIMENT_ID }}" \
+            -var="ssh_public_key=$(cat ~/.ssh/exp.pub)" \
+            -var="disk_size_gb=${{ inputs.disk_size_gb }}" \
+            -var="expose_http=${{ inputs.expose_http }}"
+
+      - name: "📣 Discord: Finished"
+        if: always()
+        run: |
+          bash experiment-infra/scripts/notify-discord.sh "${{ job.status }}" \
+            "$PROJECT_NAME" "${{ inputs.machine_type }}" "${{ inputs.gpu }}" \
+            "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

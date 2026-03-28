@@ -1,0 +1,36 @@
+# .github/workflows/experiment.yml — AgentTutor variant
+# Adds keep_alive_minutes for temporary web app deploy
+
+name: "🌐 Deploy Test"
+
+on:
+  workflow_dispatch:
+    inputs:
+      keep_alive_minutes:
+        description: "Keep app live for (minutes)"
+        type: choice
+        default: "30"
+        options:
+          - "15"
+          - "30"
+          - "60"
+      branch:
+        description: "Branch to deploy"
+        required: false
+        default: "main"
+
+jobs:
+  run:
+    uses: # ← FILL IN: <username>/experiment-infra/.github/workflows/run-experiment.yml@main
+    with:
+      machine_type: "e2-standard-2"
+      gpu: "none"
+      max_runtime_minutes: ${{ inputs.keep_alive_minutes }}
+      expose_http: true
+      disk_size_gb: "40"
+    secrets:
+      GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+      GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+      VM_SSH_PRIVATE_KEY: ${{ secrets.VM_SSH_PRIVATE_KEY }}
+      GH_PAT: ${{ secrets.GH_PAT }}
