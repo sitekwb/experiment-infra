@@ -14,7 +14,7 @@ variable "gcp_zone" {
   type        = string
   default     = "europe-west1-b"
   validation {
-    condition     = can(regex("^[a-z]+-[a-z]+[0-9]-[a-z]$", var.gcp_zone))
+    condition     = can(regex("^[a-z]+-[a-z]+[0-9]+-[a-z]$", var.gcp_zone))
     error_message = "gcp_zone must be a valid GCP zone (e.g., europe-west1-b)."
   }
 }
