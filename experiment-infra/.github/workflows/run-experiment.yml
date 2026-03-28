@@ -95,13 +95,14 @@ jobs:
             -var="disk_size_gb=${{ inputs.disk_size_gb }}" \
             -var="expose_http=${{ inputs.expose_http }}"
 
-          echo "vm_ip=$(terraform output -raw vm_ip)" >> $GITHUB_OUTPUT
+          echo "vm_ip=$(terraform output -raw vm_ip)" >> "$GITHUB_OUTPUT"
 
       - name: "⏳ Wait for VM"
         run: |
           SSH_OPTS="-i ~/.ssh/exp -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o UserKnownHostsFile=/dev/null"
-          for i in $(seq 1 60); do
-            ssh $SSH_OPTS runner@${{ steps.tf.outputs.vm_ip }} "echo ready" 2>/dev/null && break
+          for _i in $(seq 1 60); do
+            # shellcheck disable=SC2086  # SSH_OPTS must word-split
+            ssh $SSH_OPTS "runner@${{ steps.tf.outputs.vm_ip }}" "echo ready" 2>/dev/null && break
             sleep 10
           done
 
@@ -131,7 +132,7 @@ jobs:
             echo "::warning::Hit timeout (${{ inputs.max_runtime_minutes }} min)"
           elif [ "${EXIT_CODE:-0}" -ne 0 ]; then
             echo "::error::Experiment failed (exit $EXIT_CODE)"
-            exit ${EXIT_CODE}
+            exit "${EXIT_CODE}"
           fi
 
       # ── Results ────────────────────────────────────────────
