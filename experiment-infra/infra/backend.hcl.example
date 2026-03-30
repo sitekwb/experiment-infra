@@ -1,0 +1,8 @@
+# Copy to backend.hcl (gitignored) and set bucket to the name from bootstrap output.
+# Usage from this directory (infra/):
+#   terraform init -backend-config=backend.hcl
+#
+# prefix separates state files when multiple roots share one bucket.
+
+bucket = "your-project-id-terraform-state"
+prefix = "experiment-infra/default"

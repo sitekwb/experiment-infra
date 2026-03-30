@@ -7,22 +7,42 @@ submodule.
 
 ```
 experiment-infra/
-├── infra/          # Terraform for GCP experiment VM
-├── scripts/        # run-on-vm.sh, notify-discord.sh
-└── templates/      # reusable workflow and container templates
+├── infra/              # Terraform for GCP experiment VM (remote state in GCS)
+│   ├── bootstrap/    # One-time: create versioned GCS bucket for Terraform state
+│   ├── backend.hcl.example
+│   └── ...
+├── scripts/            # run-on-vm.sh, notify-discord.sh
+└── templates/          # reusable workflow and container templates
 ```
 
 ## Terraform usage
 
+Remote state is stored in **Google Cloud Storage**. **Once per GCP project**, create the bucket:
+
 ```bash
-cd experiment-infra/infra
+cd infra/bootstrap
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars — gcp_project_id, state_bucket_name (globally unique)
 terraform init
+terraform apply
+```
+
+Then configure the main module and run plan/apply:
+
+```bash
+cd ..
+cp backend.hcl.example backend.hcl
+# Edit backend.hcl — bucket (from bootstrap output), prefix
+
+terraform init -backend-config=backend.hcl
 terraform validate
 terraform plan \
   -var="gcp_project_id=<your-project>" \
   -var="experiment_id=<experiment-id>" \
   -var="ssh_public_key=<your-public-key>"
 ```
+
+See [`infra/bootstrap/README.md`](infra/bootstrap/README.md) for IAM, migrating existing local state, and details.
 
 ## Generic module contract
 
@@ -63,6 +83,6 @@ terraform plan \
 
 ## Notes
 
-- Do not commit `.terraform/`, `*.tfstate*`, or real `*.tfvars`.
+- Do not commit `.terraform/`, `*.tfstate*`, real `*.tfvars`, or `backend.hcl` (use `backend.hcl.example`).
 - Keep sample values in `*.tfvars.example` only.
 - Commit `.terraform.lock.hcl` to pin provider versions across environments.

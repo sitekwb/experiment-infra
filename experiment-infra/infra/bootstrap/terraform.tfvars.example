@@ -1,0 +1,5 @@
+# Copy to terraform.tfvars (gitignored) and set values.
+gcp_project_id    = "your-gcp-project-id"
+state_bucket_name = "your-project-id-terraform-state"
+# location        = "EU"           # optional: multi-region EU
+# location        = "europe-west1" # optional: regional

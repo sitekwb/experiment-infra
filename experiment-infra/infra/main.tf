@@ -69,7 +69,8 @@ resource "google_compute_instance" "experiment" {
     preemptible                 = var.provisioning_model == "SPOT"
     instance_termination_action = var.provisioning_model == "SPOT" ? var.instance_termination_action : null
     automatic_restart           = var.provisioning_model == "SPOT" ? false : true
-    on_host_maintenance         = local.has_gpu ? "TERMINATE" : "MIGRATE"
+    # SPOT/preemptible requires TERMINATE (cannot use MIGRATE with preemptible).
+    on_host_maintenance = (local.has_gpu || var.provisioning_model == "SPOT") ? "TERMINATE" : "MIGRATE"
   }
 
   # Do not set metadata.startup-script here: it conflicts with metadata_startup_script

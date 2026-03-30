@@ -8,10 +8,10 @@ terraform {
     }
   }
 
-  # Remote state in GCS. Create the bucket once (see bootstrap/) then:
-  #   terraform init -backend-config=backend.hcl
-  # For Infracost/plan without configuring the bucket, use: terraform init -backend=false
-  backend "gcs" {}
+  # Bootstrap uses local state only; the main infra/ module stores state in the bucket this stack creates.
+  backend "local" {
+    path = "terraform.tfstate"
+  }
 }
 
 provider "google" {
