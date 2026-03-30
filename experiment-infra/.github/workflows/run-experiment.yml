@@ -125,9 +125,16 @@ jobs:
           SSH="ssh -i ~/.ssh/exp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
           SCP="scp -i ~/.ssh/exp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 
-          # Clone THIS project repo on the VM (same ref that triggered the workflow)
-          $SSH runner@$VM "git clone --branch ${{ github.ref_name }} --depth 1 \
-            https://x-access-token:${{ secrets.GH_PAT }}@github.com/${{ github.repository }}.git ~/project"
+          # Clone THIS project repo on the VM (same ref that triggered the workflow).
+          # Do not put the PAT in the git clone URL (avoids exposing it via ps/history on the VM).
+          # Copy token via scp to a chmod-600 file, authenticate with GIT_ASKPASS, then delete both.
+          PAT_FILE="$(mktemp)"
+          printf '%s' "${{ secrets.GH_PAT }}" > "$PAT_FILE"
+          chmod 600 "$PAT_FILE"
+          $SCP "$PAT_FILE" runner@$VM:/tmp/.git-credential-pat
+          rm -f "$PAT_FILE"
+
+          $SSH runner@$VM "set -euo pipefail; chmod 600 /tmp/.git-credential-pat; printf '%s\\n' '#!/bin/sh' 'if echo \"\$1\" | grep -qi password; then cat /tmp/.git-credential-pat; else echo git; fi' > /tmp/git-askpass.sh; chmod 700 /tmp/git-askpass.sh; export GIT_ASKPASS=/tmp/git-askpass.sh GIT_TERMINAL_PROMPT=0; rm -rf ~/project; git clone --branch '${{ github.ref_name }}' --depth 1 'https://github.com/${{ github.repository }}.git' ~/project; rm -f /tmp/.git-credential-pat /tmp/git-askpass.sh"
 
           # Copy run script
           $SCP experiment-infra/scripts/run-on-vm.sh runner@$VM:~/run-on-vm.sh
