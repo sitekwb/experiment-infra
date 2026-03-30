@@ -1,4 +1,9 @@
-infra/.terraform/
-infra/*.tfstate*
-infra/.terraform.lock.hcl
+# Terraform artifacts
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+
+# Local credentials and keys
 *.pem

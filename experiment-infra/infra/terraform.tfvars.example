@@ -1,0 +1,26 @@
+gcp_project_id = "my-gcp-project"
+gcp_region     = "europe-west1"
+gcp_zone       = "europe-west1-b"
+
+experiment_id  = "exp-sample"
+ssh_public_key = "ssh-ed25519 AAAA... user@host"
+ssh_user       = "runner"
+
+machine_type   = "e2-standard-4"
+gpu_type       = ""
+gpu_count      = 0
+
+provisioning_model          = "SPOT"
+instance_termination_action = "STOP"
+
+disk_size_gb      = 80
+data_disk_size_gb = 200
+data_disk_type    = "pd-ssd"
+
+network            = "default"
+subnetwork         = null
+allowed_ssh_ranges = ["0.0.0.0/0"]
+
+max_runtime_seconds = 14400
+max_idle_hours      = 4
+expose_http         = false
