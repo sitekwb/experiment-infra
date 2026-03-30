@@ -25,6 +25,18 @@ variable "machine_type" {
   default     = "e2-standard-4"
 }
 
+variable "provisioning_model" {
+  description = "Instance provisioning model (SPOT or STANDARD)"
+  type        = string
+  default     = "SPOT"
+}
+
+variable "instance_termination_action" {
+  description = "Termination action for SPOT VMs (STOP or DELETE)"
+  type        = string
+  default     = "STOP"
+}
+
 variable "gpu_type" {
   description = "GPU accelerator type (empty = no GPU)"
   type        = string
@@ -47,6 +59,18 @@ variable "disk_size_gb" {
   default     = 80
 }
 
+variable "data_disk_size_gb" {
+  description = "Persistent data disk size in GB"
+  type        = number
+  default     = 200
+}
+
+variable "data_disk_type" {
+  description = "Persistent data disk type"
+  type        = string
+  default     = "pd-ssd"
+}
+
 variable "experiment_id" {
   description = "Unique experiment identifier"
   type        = string
@@ -61,10 +85,34 @@ variable "ssh_public_key" {
   type        = string
 }
 
+variable "ssh_user" {
+  description = "SSH username configured on VM"
+  type        = string
+  default     = "runner"
+}
+
+variable "network" {
+  description = "VPC network name"
+  type        = string
+  default     = "default"
+}
+
+variable "subnetwork" {
+  description = "Optional VPC subnetwork name"
+  type        = string
+  default     = null
+}
+
 variable "max_runtime_seconds" {
   description = "Max VM lifetime in seconds (safety net)"
   type        = number
   default     = 14400
+}
+
+variable "max_idle_hours" {
+  description = "Shutdown VM after this many idle hours"
+  type        = number
+  default     = 4
 }
 
 variable "expose_http" {
