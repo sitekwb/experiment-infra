@@ -52,7 +52,7 @@ Required variables:
 - `ssh_public_key`
 
 Commonly tuned variables:
-- Runtime and scheduling: `provisioning_model`, `instance_termination_action`, `max_runtime_seconds`, `max_idle_hours`
+- Runtime and scheduling: `provisioning_model`, `instance_termination_action`, `max_runtime_seconds`, `max_idle_hours`, `no_download_shutdown_enabled`, `no_download_boot_grace_minutes`, `no_download_required_checks`
 - Compute profile: `machine_type`, `gpu_type`, `gpu_count`
 - Storage profile: `disk_size_gb`, `data_disk_size_gb`, `data_disk_type`
 - Network and access: `network`, `subnetwork`, `allowed_ssh_ranges`

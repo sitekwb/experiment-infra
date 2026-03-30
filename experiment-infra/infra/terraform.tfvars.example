@@ -23,4 +23,10 @@ allowed_ssh_ranges = ["0.0.0.0/0"]
 
 max_runtime_seconds = 14400
 max_idle_hours      = 4
+
+# Optional: shut down when download_data.sh is not running (after boot grace).
+# no_download_shutdown_enabled = false
+# no_download_boot_grace_minutes = 25
+# no_download_required_checks = 1
+
 expose_http         = false
