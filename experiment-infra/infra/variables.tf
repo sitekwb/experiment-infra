@@ -103,16 +103,28 @@ variable "subnetwork" {
   default     = null
 }
 
-variable "max_runtime_seconds" {
-  description = "Max VM lifetime in seconds (safety net)"
+variable "max_idle_hours" {
+  description = "Shut down the VM after this many consecutive idle hours (no non-root SSH sessions, loadavg 1m < 0.2; checked every 10 minutes)."
   type        = number
-  default     = 14400
+  default     = 1
 }
 
-variable "max_idle_hours" {
-  description = "Shutdown VM after this many idle hours"
+variable "no_download_shutdown_enabled" {
+  description = "Install a timer that shuts down the VM when download_data.sh is not running (after boot grace). Use false if you need the VM up without downloads."
+  type        = bool
+  default     = true
+}
+
+variable "no_download_boot_grace_minutes" {
+  description = "Minutes after boot before evaluating no-download shutdown (allows systemd/tmux to start download_data.sh)."
   type        = number
-  default     = 4
+  default     = 25
+}
+
+variable "no_download_required_checks" {
+  description = "Consecutive timer intervals (10 minutes each) with no download_data.sh before shutdown."
+  type        = number
+  default     = 1
 }
 
 variable "expose_http" {

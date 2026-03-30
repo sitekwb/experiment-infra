@@ -98,7 +98,7 @@ resource "google_compute_instance" "experiment" {
     set -euo pipefail
 
     STATE_FILE="/var/lib/auto-shutdown-idle-count"
-    IDLE_LIMIT_MINUTES="$${IDLE_LIMIT_MINUTES:-240}"
+    IDLE_LIMIT_MINUTES="$${IDLE_LIMIT_MINUTES:-60}"
     CHECK_INTERVAL_MINUTES="$${CHECK_INTERVAL_MINUTES:-10}"
     REQUIRED_IDLE_CHECKS=$((IDLE_LIMIT_MINUTES / CHECK_INTERVAL_MINUTES))
 
@@ -106,7 +106,12 @@ resource "google_compute_instance" "experiment" {
     load_1m="$(awk '{print $1}' /proc/loadavg)"
     is_busy="$(awk -v load="$${load_1m}" 'BEGIN {print (load >= 0.20) ? 1 : 0}')"
 
-    if [ "$${active_users}" -eq 0 ] && [ "$${is_busy}" -eq 0 ]; then
+    download_running=0
+    if pgrep -f '[d]ownload_data.sh' >/dev/null 2>&1; then
+      download_running=1
+    fi
+
+    if [ "$${active_users}" -eq 0 ] && [ "$${is_busy}" -eq 0 ] && [ "$${download_running}" -eq 0 ]; then
       current=0
       if [ -f "$${STATE_FILE}" ]; then
         current="$(cat "$${STATE_FILE}" 2>/dev/null || echo 0)"
@@ -151,7 +156,75 @@ resource "google_compute_instance" "experiment" {
     systemctl daemon-reload
     systemctl enable --now auto-shutdown-idle.timer
 
-    (sleep ${var.max_runtime_seconds} && shutdown -h now) &
+%{if var.no_download_shutdown_enabled}
+    cat >/usr/local/bin/auto-shutdown-if-no-download.sh <<'EOS'
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    STATE_FILE="/var/lib/auto-shutdown-no-download-count"
+    BOOT_GRACE_MINUTES="$${BOOT_GRACE_MINUTES:-25}"
+    REQUIRED_NO_DOWNLOAD_CHECKS="$${REQUIRED_NO_DOWNLOAD_CHECKS:-1}"
+
+    is_download_running() {
+        pgrep -f '[d]ownload_data.sh' >/dev/null 2>&1
+    }
+
+    uptime_sec="$(awk -F. '{print $$1}' /proc/uptime)"
+    grace_sec=$(awk -v m="$${BOOT_GRACE_MINUTES}" 'BEGIN {print m*60}')
+
+    if [[ "$${uptime_sec}" -lt "$${grace_sec}" ]]; then
+        logger -t auto-shutdown-no-download "Boot grace ($${BOOT_GRACE_MINUTES}m), skip."
+        exit 0
+    fi
+
+    if is_download_running; then
+        echo 0 >"$${STATE_FILE}"
+        logger -t auto-shutdown-no-download "download_data.sh running, reset counter."
+        exit 0
+    fi
+
+    current=0
+    if [[ -f "$${STATE_FILE}" ]]; then
+        current="$(cat "$${STATE_FILE}" 2>/dev/null || echo 0)"
+    fi
+    current=$$(($${current} + 1))
+    echo "$${current}" >"$${STATE_FILE}"
+
+    if [[ "$${current}" -ge "$${REQUIRED_NO_DOWNLOAD_CHECKS}" ]]; then
+        logger -t auto-shutdown-no-download \
+            "No download_data.sh process after grace ($${BOOT_GRACE_MINUTES}m); shutting down."
+        shutdown -h now
+    fi
+    EOS
+    chmod +x /usr/local/bin/auto-shutdown-if-no-download.sh
+
+    cat >/etc/systemd/system/auto-shutdown-no-download.service <<'EOS'
+    [Unit]
+    Description=Shut down VM when download_data.sh is not running (after boot grace)
+
+    [Service]
+    Type=oneshot
+    Environment=BOOT_GRACE_MINUTES=${var.no_download_boot_grace_minutes}
+    Environment=REQUIRED_NO_DOWNLOAD_CHECKS=${var.no_download_required_checks}
+    ExecStart=/usr/local/bin/auto-shutdown-if-no-download.sh
+    EOS
+
+    cat >/etc/systemd/system/auto-shutdown-no-download.timer <<'EOS'
+    [Unit]
+    Description=Check if download_data.sh is running; stop VM if not
+
+    [Timer]
+    OnBootSec=10m
+    OnUnitActiveSec=10m
+    Persistent=true
+
+    [Install]
+    WantedBy=timers.target
+    EOS
+
+    systemctl daemon-reload
+    systemctl enable --now auto-shutdown-no-download.timer
+%{endif}
 
     ${local.has_gpu ? file("${path.module}/startup-gpu.sh") : file("${path.module}/startup-cpu.sh")}
   EOF
